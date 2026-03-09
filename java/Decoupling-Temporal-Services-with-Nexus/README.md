@@ -2,6 +2,26 @@
 
 **Language:** Java | **Prereqs:** Temporal workflows & activities
 
+## Table of Contents
+
+- [Scenario](#scenario)
+- [Overview](#overview)
+- [Checkpoint 0: Run the Monolith](#checkpoint-0-run-the-monolith)
+- [The 7 TODOs](#the-7-todos)
+- [TODO 1: Define the ComplianceWorkflow Interface](#todo-1-define-the-complianceworkflow-interface)
+- [TODO 2: Implement the ComplianceWorkflow](#todo-2-implement-the-complianceworkflow)
+- [TODO 3: Create the Nexus Service Interface](#todo-3-create-the-nexus-service-interface)
+- [TODO 4: Implement the Nexus Handler](#todo-4-implement-the-nexus-handler)
+- [TODO 5: Create the Compliance Worker](#todo-5-create-the-compliance-worker)
+- [Checkpoint 1: Compliance Worker Starts](#checkpoint-1-compliance-worker-starts)
+- [Checkpoint 1.5: Create the Nexus Endpoint](#checkpoint-15-create-the-nexus-endpoint)
+- [TODO 6: Replace Activity Stub with Nexus Stub](#todo-6-replace-activity-stub-with-nexus-stub)
+- [TODO 7: Update the Payments Worker](#todo-7-update-the-payments-worker)
+- [Checkpoint 2: Full Decoupled End-to-End](#checkpoint-2-full-decoupled-end-to-end)
+- [Victory Lap: Durability Across the Boundary](#victory-lap-durability-across-the-boundary)
+- [Bonus Exercise: What Happens When You Wait Too Long?](#bonus-exercise-what-happens-when-you-wait-too-long)
+- [Quiz](#quiz)
+
 ---
 
 ## Scenario
@@ -534,34 +554,58 @@ cd exercise
 mvn compile exec:java@starter
 ```
 
-:white_check_mark: **Checkpoint 2 passed** if you get the **exact same results** as Checkpoint 0:
+You should see TXN-A (`COMPLETED`) and TXN-C (`DECLINED_COMPLIANCE`) return immediately. But TXN-B ($12K, US→UK) is MEDIUM risk — its compliance workflow is **paused, waiting for human review**.
+
+**Terminal 4 — Approve TXN-B:**
+```bash
+temporal workflow update \
+  --workflow-id compliance-TXN-B \
+  --name review \
+  --input '[ true, "Approved after manual review" ]'
+```
+
+You should see the Update result returned, and back in Terminal 3, TXN-B completes with `COMPLETED`.
+
+:white_check_mark: **Checkpoint 2 passed** if you get these results:
 
 <table>
 <tr>
 <th>Transaction</th>
 <th>Risk</th>
 <th>Result</th>
+<th>How</th>
 </tr>
 <tr>
 <td><code>TXN-A</code></td>
 <td>&#x1F7E2; LOW</td>
 <td>&#x2705; <code>COMPLETED</code></td>
+<td>Auto-approved</td>
 </tr>
 <tr>
 <td><code>TXN-B</code></td>
 <td>&#x1F7E0; MEDIUM</td>
 <td>&#x2705; <code>COMPLETED</code></td>
+<td>Human-approved via Update</td>
 </tr>
 <tr>
 <td><code>TXN-C</code></td>
 <td>&#x1F534; HIGH</td>
 <td>&#x1F6AB; <code>DECLINED_COMPLIANCE</code></td>
+<td>Auto-denied</td>
 </tr>
 </table>
 
-Same results, completely different architecture. Two workers, two blast radii, two independent teams.
+Same data flow, completely different architecture. Two workers, two blast radii, two independent teams — plus human-in-the-loop for edge cases.
 
-> **Check the Temporal UI** at http://localhost:8233 — you should see Nexus operations in the workflow event history!
+> **Check the Temporal UI** at http://localhost:8233 — you should see Nexus operations and the Update in the workflow event history!
+
+> **Try denying instead:** Run the same command with `false` to see TXN-B get `DECLINED_COMPLIANCE`:
+> ```bash
+> temporal workflow update \
+>   --workflow-id compliance-TXN-B \
+>   --name review \
+>   --input '[ false, "Denied: suspicious pattern" ]'
+> ```
 
 ---
 
@@ -571,7 +615,7 @@ This is where it gets fun. Let's prove that Nexus is **durable** — not just a 
 
 1. **Start both workers** (if not already running)
 2. **Run the starter** in another terminal
-3. **While TXN-B is processing**, kill the compliance worker (Ctrl+C in Terminal 1)
+3. **While TXN-A is processing** (10s delay), kill the compliance worker (Ctrl+C in Terminal 1)
 4. Watch the payment workflow **pause** — it's waiting for the Nexus operation to complete
 5. **Restart the compliance worker**
 6. Watch the payment workflow **resume and complete**
