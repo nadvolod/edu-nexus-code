@@ -18,7 +18,7 @@
 - [TODO 6: Replace Activity Stub with Nexus Stub](#todo-6-replace-activity-stub-with-nexus-stub)
 - [TODO 7: Update the Payments Worker](#todo-7-update-the-payments-worker)
 - [Checkpoint 2: Full Decoupled End-to-End](#checkpoint-2-full-decoupled-end-to-end)
-- [Victory Lap: Durability Across the Boundary](#victory-lap-durability-across-the-boundary)
+- [Checkpoint 3: Durability Across the Boundary](#checkpoint-3-durability-across-the-boundary)
 - [Bonus Exercise: What Happens When You Wait Too Long?](#bonus-exercise-what-happens-when-you-wait-too-long)
 - [Quiz](#quiz)
 
@@ -29,6 +29,61 @@
 <p align="center">
   <img src="ui/nexus-durability.svg" alt="Durability: When Compliance crashes, the Payment workflow pauses and automatically resumes when Compliance recovers — no data loss, no retry logic needed" width="100%"/>
 </p>
+
+You work at a bank where every payment flows through **three steps**:
+
+1. **Validate** the payment (amount, accounts)
+2. **Check compliance** (risk assessment, sanctions screening)
+3. **Execute** the payment (call the gateway)
+
+Two teams split this work:
+
+<table>
+<tr>
+<th>Team</th>
+<th>Owns</th>
+<th>Task Queue</th>
+</tr>
+<tr>
+<td><strong>Payments</strong></td>
+<td>Steps 1 &amp; 3 — validate and execute</td>
+<td><code>payments-processing</code></td>
+</tr>
+<tr>
+<td><strong>Compliance</strong></td>
+<td>Step 2 — risk assessment &amp; regulatory checks</td>
+<td><code>compliance-risk</code></td>
+</tr>
+</table>
+
+### The Problem
+
+Right now, **both teams' code runs on the same Worker**. One process. One deployment. One blast radius.
+
+That's a problem because the Compliance team deals with sensitive regulatory work — OFAC sanctions screening, anti-money laundering (AML) monitoring, risk decisions — that requires stricter access controls, separate audit trails, and its own release cycle. Payments has none of those constraints. But because both teams share a single process, they're forced into the same failure domain, the same security perimeter, and the same deploy pipeline.
+
+In practice, that shared fate plays out like this: Compliance ships a bug at 3 AM. Their code crashes. But it's running on the Payments Worker — so **Payments goes down too**. Same blast radius. Same 3 AM page. Two teams, one shared fate.
+
+The obvious fix is splitting them into microservices with REST calls. But that introduces a new problem: if Compliance is down when Payments calls it, the request is lost. No retries. No durability. You're writing your own retry loops, circuit breakers, and dead letter queues. You've traded one problem for three.
+
+### The Solution: Temporal Nexus
+
+[**Nexus**](https://docs.temporal.io/nexus) gives you team boundaries **with** durability. Each team gets its own Worker, its own deployment pipeline, its own security perimeter, its own blast radius — while Temporal manages the durable, type-safe calls between them.
+
+The Payments workflow calls the Compliance team through a Nexus operation. If the Compliance Worker goes down mid-call, the payment workflow just...waits. When Compliance comes back, it picks up exactly where it left off. No retry logic. No data loss. No 3am page for the Payments team.
+
+The best part? The code change is almost invisible:
+
+```java
+// BEFORE (monolith — direct activity call):
+ComplianceResult compliance = complianceActivity.checkCompliance(compReq);
+
+// AFTER (Nexus — durable cross-team call):
+ComplianceResult compliance = complianceService.checkCompliance(compReq);
+```
+
+Same method name. Same input. Same output. Completely different architecture.
+
 
 ## Quickstart Docs By Temporal
 
@@ -624,20 +679,44 @@ Same data flow, completely different architecture. Two workers, two blast radii,
 
 ---
 
-## Victory Lap: Durability Across the Boundary
+## Checkpoint 3: Durability Across the Boundary
 
 This is where it gets fun. Let's prove that Nexus is **durable** — not just a fancy RPC.
 
-1. **Start both workers** (if not already running)
-2. **Run the starter** in another terminal
-3. **While TXN-A is processing** (10s delay), kill the compliance worker (Ctrl+C in Terminal 1)
-4. Watch the payment workflow **pause** — it's waiting for the Nexus operation to complete
-5. **Restart the compliance worker**
-6. Watch the payment workflow **resume and complete**
+Make sure both workers are running and that any previous workflows have completed or been terminated.
 
-The payment workflow didn't crash. It didn't timeout. It didn't lose data. It just... waited. Because Temporal + Nexus handles this automatically.
+**Terminal 3 — Run the starter:**
+```bash
+cd exercise
+mvn compile exec:java@starter
+```
 
-> **Try this without Nexus:** Kill the compliance activity worker mid-request in the monolith. What happens? The activity times out, the workflow retries blindly, and you're left writing manual retry logic and compensation code. With Nexus, the workflow simply picks up where it left off — durability extends across the team boundary.
+The starter runs TXN-A first. TXN-A has a 2-second processing delay in the ComplianceChecker. **During that 2-second window:**
+
+**Terminal 1 — Kill the compliance worker (Ctrl+C)**
+
+Now watch what happens:
+
+1. **Terminal 3 (starter)** — hangs. It's waiting for the TXN-A result. No crash, no error.
+2. **Temporal UI** (http://localhost:8233) — open the `payment-TXN-A` workflow. You'll see the Nexus operation in a **backing off** state. Temporal knows the compliance worker is gone and is waiting for it to come back.
+
+**Terminal 1 — Restart the compliance worker:**
+```bash
+cd exercise
+mvn compile exec:java@compliance-worker
+```
+
+Now watch:
+
+3. **Terminal 1 (compliance worker)** — picks up the work immediately. You'll see `[ComplianceChecker] Evaluating TXN-A` in the logs.
+4. **Terminal 3 (starter)** — TXN-A completes with `COMPLETED`. The starter moves on to TXN-B and TXN-C as if nothing happened.
+5. **Temporal UI** — the Nexus operation shows as completed. No retries of the payment workflow. No duplicate compliance checks. The system just resumed.
+
+:white_check_mark: **Checkpoint 3 passed** if TXN-A completes successfully after you restart the compliance worker.
+
+**What just happened:** The payment workflow didn't crash. It didn't timeout. It didn't lose data. It didn't need retry logic. It just... waited. When the compliance worker came back, Temporal automatically routed the pending Nexus operation to it. Durability extends across the team boundary — that's the whole point of Nexus.
+
+> **Compare with a plain HTTP call:** If Payments called Compliance over REST, you'd need circuit breakers, retry queues, dead letter queues, idempotency keys, and a way to correlate the response back to the right payment. With Nexus, all of that is built in.
 
 ---
 
