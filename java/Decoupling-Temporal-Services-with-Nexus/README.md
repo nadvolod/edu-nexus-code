@@ -26,10 +26,6 @@
 
 ## Scenario
 
-<p align="center">
-  <img src="ui/nexus-durability.svg" alt="Durability: When Compliance crashes, the Payment workflow pauses and automatically resumes when Compliance recovers — no data loss, no retry logic needed" width="100%"/>
-</p>
-
 You work at a bank where every payment flows through **three steps**:
 
 1. **Validate** the payment (amount, accounts)
@@ -84,6 +80,9 @@ ComplianceResult compliance = complianceService.checkCompliance(compReq);
 
 Same method name. Same input. Same output. Completely different architecture.
 
+<p align="center">
+  <img src="ui/nexus-durability.svg" alt="Durability: When Compliance crashes, the Payment workflow pauses and automatically resumes when Compliance recovers — no data loss, no retry logic needed" width="100%"/>
+</p>
 
 ## Quickstart Docs By Temporal
 
@@ -97,11 +96,7 @@ Same method name. Same input. Same output. Completely different architecture.
   <img src="ui/scenario-overview.svg" alt="Scenario Overview: Payments and Compliance teams separated by a Nexus security boundary, with animated transaction data flowing through validate, compliance check, and execute steps" width="100%"/>
 </p>
 
-### Class Interaction Flow
 
-<p align="center">
-  <img src="ui/class-interaction.svg" alt="Class interaction flow: shows which CLI command triggers which class, method call chain across Nexus boundary, and how results flow back" width="100%"/>
-</p>
 
 > **Interactive version:** Open [`ui/nexus-decouple.html`](ui/nexus-decouple.html) in your browser to toggle between Monolith and Nexus modes with animated data flow.
 
@@ -237,6 +232,14 @@ mvn compile exec:java@starter
 **Teaching order:** Operation (1-2) → Service (3-4) → Endpoint (5, CLI) → Registry (6-7).
 
 ---
+
+## What we're building
+
+### Class Interaction Flow
+
+<p align="center">
+  <img src="ui/class-interaction.svg" alt="Class interaction flow: shows which CLI command triggers which class, method call chain across Nexus boundary, and how results flow back" width="100%"/>
+</p>
 
 ## TODO 1: Define the ComplianceWorkflow Interface
 
@@ -393,6 +396,11 @@ public class ComplianceNexusServiceImpl {
 ```
 
 > **Key insight:** Nexus handlers should only contain **Temporal primitives** (workflow starts, queries) — not arbitrary business logic. The actual compliance check runs inside ComplianceWorkflow's activity.
+
+> **Key insight:** In Nexus, keep handlers lightweight.
+If the operation needs real work, start a Workflow and let Temporal handle the durable execution.
+If the operation only needs to interact with an already-running Workflow, use a synchronous operation and forward the request through the Temporal client.
+
 
 > **Common trap:** Don't write `class ComplianceNexusServiceImpl implements ComplianceNexusService`. The handler does **not** implement the interface — the signatures are completely different. The interface method returns `ComplianceResult`, but the handler method returns `OperationHandler<ComplianceRequest, ComplianceResult>`. The link between them is the `@ServiceImpl` annotation, not Java's `implements`.
 
