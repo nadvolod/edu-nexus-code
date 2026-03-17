@@ -1,7 +1,7 @@
 package compliance.temporal;
 
 // ═══════════════════════════════════════════════════════════════════
-//  TODO 5: Create the Compliance team's worker
+//  TODO 3: Create the Compliance team's worker
 // ═══════════════════════════════════════════════════════════════════
 //
 // This is the CRAWL worker pattern with THREE registrations:
@@ -22,6 +22,7 @@ import compliance.ComplianceChecker;
 import compliance.temporal.activity.ComplianceActivityImpl;
 import compliance.temporal.workflow.ComplianceWorkflowImpl;
 import io.temporal.client.WorkflowClient;
+import io.temporal.client.WorkflowClientOptions;
 import io.temporal.serviceclient.WorkflowServiceStubs;
 import io.temporal.worker.Worker;
 import io.temporal.worker.WorkerFactory;
@@ -29,9 +30,12 @@ import io.temporal.worker.WorkerFactory;
 public class ComplianceWorkerApp {
 
     public static void main(String[] args) {
-        // TODO: C — Connect to Temporal
+        // TODO: C — Connect to Temporal (compliance-namespace)
         WorkflowServiceStubs service = WorkflowServiceStubs.newLocalServiceStubs();
-        WorkflowClient client = WorkflowClient.newInstance(service);
+        WorkflowClientOptions clientOptions = WorkflowClientOptions.newBuilder()
+                .setNamespace("compliance-namespace")
+                .build();
+        WorkflowClient client = WorkflowClient.newInstance(service, clientOptions);
 
         // TODO: R — Create factory and worker on "compliance-risk"
         WorkerFactory factory = WorkerFactory.newInstance(client);

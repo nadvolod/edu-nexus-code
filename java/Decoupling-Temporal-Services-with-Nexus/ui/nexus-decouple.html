@@ -539,7 +539,7 @@
       TXN-B &middot; $12K &middot; US&rarr;UK
     </button>
     <button class="txn-btn" data-txn="C" onclick="selectTxn('C', this)">
-      TXN-C &middot; $75K &middot; US&rarr;&#x1F6AB;
+      TXN-C &middot; $75K &middot; US&rarr;US
     </button>
   </div>
 
@@ -661,8 +661,8 @@ const TXN = {
        explanation: 'Routine domestic/standard international transfer. No regulatory concerns.' },
   B: { id: 'TXN-B', amount: '$12,000', route: 'US \u2192 UK', risk: 'MEDIUM', approved: true,
        explanation: 'International transfer above $10K threshold. Approved with AML monitoring note.' },
-  C: { id: 'TXN-C', amount: '$75,000', route: 'US \u2192 North Korea', risk: 'HIGH', approved: false,
-       explanation: 'Destination/source country is OFAC-sanctioned. Transaction blocked per regulatory requirements.' },
+  C: { id: 'TXN-C', amount: '$75,000', route: 'US \u2192 US', risk: 'HIGH', approved: false,
+       explanation: 'Transaction amount exceeds $50,000 threshold. Requires enhanced due diligence review.' },
 };
 
 let currentTxn = 'A';

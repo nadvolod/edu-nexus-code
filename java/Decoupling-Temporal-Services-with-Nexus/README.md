@@ -5,20 +5,21 @@
 ## Table of Contents
 
 - [Scenario](#scenario)
+- [Why Nexus?](#why-nexus)
 - [Overview](#overview)
 - [Checkpoint 0: Run the Monolith](#checkpoint-0-run-the-monolith)
-- [The 7 TODOs](#the-7-todos)
-- [TODO 1: Define the ComplianceWorkflow Interface](#todo-1-define-the-complianceworkflow-interface)
-- [TODO 2: Implement the ComplianceWorkflow](#todo-2-implement-the-complianceworkflow)
-- [TODO 3: Create the Nexus Service Interface](#todo-3-create-the-nexus-service-interface)
-- [TODO 4: Implement the Nexus Handler](#todo-4-implement-the-nexus-handler)
-- [TODO 5: Create the Compliance Worker](#todo-5-create-the-compliance-worker)
+- [The TODOs](#the-todos)
+- [The Compliance Workflow (already in the exercise)](#the-compliance-workflow-already-in-the-exercise)
+- [TODO 1: Create the Nexus Service Interface](#todo-1-create-the-nexus-service-interface)
+- [TODO 2: Implement the Nexus Handler](#todo-2-implement-the-nexus-handler)
+- [TODO 3: Create the Compliance Worker](#todo-3-create-the-compliance-worker)
 - [Checkpoint 1: Compliance Worker Starts](#checkpoint-1-compliance-worker-starts)
 - [Checkpoint 1.5: Create the Nexus Endpoint](#checkpoint-15-create-the-nexus-endpoint)
-- [TODO 6: Replace Activity Stub with Nexus Stub](#todo-6-replace-activity-stub-with-nexus-stub)
-- [TODO 7: Update the Payments Worker](#todo-7-update-the-payments-worker)
+- [TODO 4: Replace Activity Stub with Nexus Stub](#todo-4-replace-activity-stub-with-nexus-stub)
+- [TODO 5: Update the Payments Worker](#todo-5-update-the-payments-worker)
 - [Checkpoint 2: Full Decoupled End-to-End](#checkpoint-2-full-decoupled-end-to-end)
 - [Checkpoint 3: Durability Across the Boundary](#checkpoint-3-durability-across-the-boundary)
+- [TODO 6: Send a Workflow Update via Nexus (Sync Handler)](#todo-6-send-a-workflow-update-via-nexus-sync-handler)
 - [Bonus Exercise: What Happens When You Wait Too Long?](#bonus-exercise-what-happens-when-you-wait-too-long)
 - [Quiz](#quiz)
 
@@ -84,9 +85,31 @@ Same method name. Same input. Same output. Completely different architecture.
   <img src="ui/nexus-durability.svg" alt="Durability: When Compliance crashes, the Payment workflow pauses and automatically resumes when Compliance recovers — no data loss, no retry logic needed" width="100%"/>
 </p>
 
-## Quickstart Docs By Temporal
+## Why Nexus?
 
-:rocket: [Get started in a few mins](https://docs.temporal.io/quickstarts?utm_campaign=awareness-nikolay-advolodkin&utm_medium=code&utm_source=github)
+You could split Payments and Compliance into microservices with REST calls. But then you'd write your own retry loops, circuit breakers, and dead letter queues. Here's how the options compare:
+
+| | REST / HTTP | Direct Temporal Activity | Temporal Nexus |
+|---|---|---|---|
+| **Worker goes down** | Request lost, manual retry | Same crash domain | Workflow pauses, auto-resumes |
+| **Retry logic** | Write it yourself | Temporal retries within team | Built-in across the boundary |
+| **Type safety** | OpenAPI + code gen | Java interface | Shared Java interface |
+| **Human review** | Custom callback URLs | Couple teams together | `@UpdateMethod`, durable wait |
+| **Team independence** | Shared failure domain | Shared deployment | Separate workers, blast radii |
+| **Code change** | Full rewrite | — | One-line stub swap |
+
+The one-line swap:
+```java
+// BEFORE — direct activity call (same worker, same blast radius):
+ComplianceResult compliance = complianceActivity.checkCompliance(compReq);
+
+// AFTER — Nexus call (separate worker, separate blast radius, durable):
+ComplianceResult compliance = complianceService.checkCompliance(compReq);
+```
+
+Same method name. Same input. Same output. Completely different architecture.
+
+> 🚀 **New to Nexus?** Try the [Nexus Quick Start](https://docs.temporal.io/nexus) for a faster path. Come back here for the full decoupling exercise.
 
 ---
 
@@ -111,12 +134,11 @@ Before changing anything, let's see the system working. You need **3 terminal wi
 temporal server start-dev
 ```
 
-> **Note:** If you're using a Temporal server version prior to v1.25.0, Workflow Update must be manually enabled. Start the server with:
-> ```bash
-> temporal server start-dev \
->   --dynamic-config-value frontend.enableUpdateWorkflowExecution=true \
->   --dynamic-config-value frontend.enableUpdateWorkflowExecutionAsyncAccepted=true
-> ```
+**Create namespaces** (one-time setup, best practice for cross-team isolation):
+```bash
+temporal operator namespace create --namespace payments-namespace
+temporal operator namespace create --namespace compliance-namespace
+```
 
 **Terminal 1 — Start the monolith worker:**
 ```bash
@@ -164,7 +186,7 @@ mvn compile exec:java@starter
 <tr>
 <td><code>TXN-C</code></td>
 <td>$75,000</td>
-<td>US &#x2192; North Korea</td>
+<td>US &#x2192; US</td>
 <td>&#x1F534; HIGH</td>
 <td>&#x1F6AB; <code>DECLINED_COMPLIANCE</code></td>
 </tr>
@@ -176,7 +198,9 @@ mvn compile exec:java@starter
 
 ---
 
-## The 7 TODOs
+## The TODOs
+
+> **Pre-provided:** The `ComplianceWorkflow` interface and implementation are already complete in the exercise. They use Temporal patterns you've already seen — `@WorkflowMethod`, `@UpdateMethod`, and `Workflow.await()`. Your work starts at **TODO 1** — the Nexus-specific parts.
 
 <table>
 <tr>
@@ -187,49 +211,49 @@ mvn compile exec:java@starter
 </tr>
 <tr>
 <td><strong>1</strong></td>
-<td><code>compliance/temporal/workflow/ComplianceWorkflow.java</code></td>
-<td>&#x1F7E2; Create</td>
-<td><code>@WorkflowInterface</code> + <code>@UpdateMethod</code></td>
-</tr>
-<tr>
-<td><strong>2</strong></td>
-<td><code>compliance/temporal/workflow/ComplianceWorkflowImpl.java</code></td>
-<td>&#x1F7E2; Create</td>
-<td><code>Workflow.await()</code> + activity call</td>
-</tr>
-<tr>
-<td><strong>3</strong></td>
 <td><code>shared/nexus/ComplianceNexusService.java</code></td>
-<td>&#x1F7E2; Create</td>
+<td>&#x1F7E2; Your work</td>
 <td><code>@Service</code> + <code>@Operation</code> interface</td>
 </tr>
 <tr>
-<td><strong>4</strong></td>
+<td><strong>2</strong></td>
 <td><code>compliance/temporal/ComplianceNexusServiceImpl.java</code></td>
-<td>&#x1F7E2; Create</td>
+<td>&#x1F7E2; Your work</td>
 <td><code>fromWorkflowHandle</code>: link Nexus op to workflow</td>
 </tr>
 <tr>
-<td><strong>5</strong></td>
+<td><strong>3</strong></td>
 <td><code>compliance/temporal/ComplianceWorkerApp.java</code></td>
-<td>&#x1F7E2; Create</td>
+<td>&#x1F7E2; Your work</td>
 <td>Register workflow + activity + Nexus handler</td>
 </tr>
 <tr>
-<td><strong>6</strong></td>
+<td><strong>4</strong></td>
 <td><code>payments/temporal/PaymentProcessingWorkflowImpl.java</code></td>
 <td>&#x1F7E1; Modify</td>
 <td>Replace activity stub &#x2192; Nexus stub</td>
 </tr>
 <tr>
-<td><strong>7</strong></td>
+<td><strong>5</strong></td>
 <td><code>payments/temporal/PaymentsWorkerApp.java</code></td>
 <td>&#x1F7E1; Modify</td>
 <td>Add <code>NexusServiceOptions</code>, remove <code>ComplianceActivity</code></td>
 </tr>
+<tr>
+<td><strong>6a</strong></td>
+<td><code>shared/nexus/ComplianceNexusService.java</code></td>
+<td>&#x1F7E2; Your work</td>
+<td>Add <code>@Operation submitReview(ReviewRequest)</code></td>
+</tr>
+<tr>
+<td><strong>6b</strong></td>
+<td><code>compliance/temporal/ComplianceNexusServiceImpl.java</code></td>
+<td>&#x1F7E2; Your work</td>
+<td><code>OperationHandler.sync</code>: send Update via Nexus</td>
+</tr>
 </table>
 
-**Teaching order:** Operation (1-2) → Service (3-4) → Endpoint (5, CLI) → Registry (6-7).
+**Teaching order:** Service interface (1) → Async handler (2) → Worker (3, CLI) → Caller (4-5) → Sync handler (6a-6b).
 
 ---
 
@@ -241,110 +265,34 @@ mvn compile exec:java@starter
   <img src="ui/class-interaction.svg" alt="Class interaction flow: shows which CLI command triggers which class, method call chain across Nexus boundary, and how results flow back" width="100%"/>
 </p>
 
-## TODO 1: Define the ComplianceWorkflow Interface
+## The Compliance Workflow (already in the exercise)
 
-**File:** `compliance/temporal/workflow/ComplianceWorkflow.java`
+**Files:** `compliance/temporal/workflow/ComplianceWorkflow.java` and `ComplianceWorkflowImpl.java`
 
-This workflow runs an automated compliance check and, for MEDIUM-risk transactions, waits for a human reviewer to approve or deny via Update.
+Open them to read the code — they show the human-in-the-loop pattern you'll use later.
 
-**What to add:**
-1. `@WorkflowInterface` annotation on the interface
-2. `@WorkflowMethod`: `ComplianceResult run(ComplianceRequest request)`
-3. `@UpdateMethod`: `ComplianceResult review(boolean approved, String explanation)`
-4. `@UpdateValidatorMethod(updateName = "review")`: `void validateReview(boolean approved, String explanation)`
+**Why a workflow, not just an activity?** The compliance check is implemented as a `ComplianceWorkflow` that calls `ComplianceActivity`. Using a workflow unlocks the `@UpdateMethod` for MEDIUM-risk transactions — the workflow pauses and waits durably for a human reviewer's decision. In the future, simple cases might just use an activity, but a workflow gives you durability and human escalation for free.
 
-**Pattern to follow:**
-```java
-@WorkflowInterface
-public interface ComplianceWorkflow {
-    @WorkflowMethod
-    ComplianceResult run(ComplianceRequest request);
+**Quick read:**
+- `run()` — calls the activity, sleeps 10s (for Checkpoint 3 durability demo), then either returns or awaits review
+- `review()` — receives the human decision via `@UpdateMethod`, stores it, unblocks `run()`
+- `validateReview()` — rejects Updates that arrive at the wrong time
 
-    @UpdateMethod
-    ComplianceResult review(boolean approved, String explanation);
-
-    @UpdateValidatorMethod(updateName = "review")
-    void validateReview(boolean approved, String explanation);
-}
-```
-
-> **Why `@UpdateMethod`?** MEDIUM-risk transactions need human review. The workflow pauses after the automated check and waits for a reviewer to send an Update with their decision. LOW and HIGH risk transactions return immediately — no human needed.
+> **Your work starts below at TODO 1.**
 
 ---
 
-## TODO 2: Implement the ComplianceWorkflow
-
-**File:** `compliance/temporal/workflow/ComplianceWorkflowImpl.java`
-
-This workflow runs the automated check, then conditionally waits for human review.
-
-**What to implement:**
-1. Store the request and run `ComplianceActivity.checkCompliance()`
-2. If LOW or HIGH risk → return the automated result immediately
-3. If MEDIUM risk → `Workflow.await(() -> reviewResult != null)`, then return the review decision
-4. `review()`: create a `ComplianceResult` from the human decision, store it in `reviewResult`
-5. `validateReview()`: throw if workflow isn't awaiting review or review already submitted
-
-**Pattern to follow:**
-```java
-public class ComplianceWorkflowImpl implements ComplianceWorkflow {
-    private ComplianceRequest request;
-    private ComplianceResult autoResult;
-    private ComplianceResult reviewResult = null;
-
-    private final ComplianceActivity complianceActivity = Workflow.newActivityStub(
-            ComplianceActivity.class,
-            ActivityOptions.newBuilder()
-                    .setStartToCloseTimeout(Duration.ofSeconds(30))
-                    .build());
-
-    @Override
-    public ComplianceResult run(ComplianceRequest request) {
-        this.request = request;
-        autoResult = complianceActivity.checkCompliance(request);
-
-        if (!"MEDIUM".equals(autoResult.getRiskLevel())) {
-            return autoResult;
-        }
-
-        // MEDIUM risk → wait for human review via Update
-        Workflow.await(() -> reviewResult != null);
-        return reviewResult;
-    }
-
-    @Override
-    public ComplianceResult review(boolean approved, String explanation) {
-        this.reviewResult = new ComplianceResult(
-                request.getTransactionId(), approved, "MEDIUM", explanation);
-        return reviewResult;
-    }
-
-    @Override
-    public void validateReview(boolean approved, String explanation) {
-        if (autoResult == null || !"MEDIUM".equals(autoResult.getRiskLevel())) {
-            throw new IllegalStateException("Workflow is not awaiting review");
-        }
-        if (reviewResult != null) {
-            throw new IllegalStateException("Review already submitted");
-        }
-    }
-}
-```
-
-> **Key pattern:** `Workflow.await(() -> reviewResult != null)` blocks the workflow until the Update arrives. It's durable — if the worker restarts, the workflow replays and waits again. The `@UpdateValidatorMethod` rejects Updates that arrive at the wrong time.
-
----
-
-## TODO 3: Create the Nexus Service Interface
+## TODO 1: Create the Nexus Service Interface
 
 **File:** `shared/nexus/ComplianceNexusService.java`
 
 This is the **shared contract** between teams — like an OpenAPI spec, but durable. Both teams depend on this interface.
 
-**What to add:**
+**What to add for TODO 1:**
 1. `@Service` annotation on the interface (from `io.nexusrpc`)
-2. One method: `checkCompliance(ComplianceRequest) → ComplianceResult`
-3. `@Operation` annotation on that method
+2. `@Operation` annotation on `checkCompliance`
+
+> **Note:** You'll also see a `submitReview` method stub in the file — leave it for TODO 6a. For now, just focus on getting `checkCompliance` wired up.
 
 **Pattern to follow:**
 ```java
@@ -352,6 +300,9 @@ This is the **shared contract** between teams — like an OpenAPI spec, but dura
 public interface ComplianceNexusService {
     @Operation
     ComplianceResult checkCompliance(ComplianceRequest request);
+
+    // submitReview — add @Operation in TODO 6a
+    ComplianceResult submitReview(ReviewRequest request);
 }
 ```
 
@@ -359,7 +310,7 @@ public interface ComplianceNexusService {
 
 ---
 
-## TODO 4: Implement the Nexus Handler
+## TODO 2: Implement the Nexus Handler
 
 **File:** `compliance/temporal/ComplianceNexusServiceImpl.java`
 
@@ -395,14 +346,27 @@ public class ComplianceNexusServiceImpl {
 }
 ```
 
-> **Key insight:** Nexus handlers should only contain **Temporal primitives** (workflow starts, queries) — not arbitrary business logic. The actual compliance check runs inside ComplianceWorkflow's activity.
+> ⚠️ **Nexus sync handlers have a 10-second deadline.** That's why the handler starts a workflow instead of running compliance logic directly. The workflow can run for minutes or hours — it's durable. The handler just starts it and returns a handle (like a receipt number). If you put blocking logic in the handler, it will time out.
+>
+> This is the reason `fromWorkflowHandle()` exists: it links the Nexus operation to the backing workflow durably. Retries reuse the same workflow instead of creating duplicates.
 
-> **Key insight:** In Nexus, keep handlers lightweight.
-If the operation needs real work, start a Workflow and let Temporal handle the durable execution.
-If the operation only needs to interact with an already-running Workflow, use a synchronous operation and forward the request through the Temporal client.
+<details>
+<summary>💡 Why not call ComplianceChecker.checkCompliance() directly in the handler?</summary>
 
+Sync handlers run inside the Nexus request processing path. They should only use Temporal primitives (workflow starts, queries). Running arbitrary Java code (like `ComplianceChecker.checkCompliance()`) bypasses Temporal's durability guarantees.
 
-> **Common trap:** Don't write `class ComplianceNexusServiceImpl implements ComplianceNexusService`. The handler does **not** implement the interface — the signatures are completely different. The interface method returns `ComplianceResult`, but the handler method returns `OperationHandler<ComplianceRequest, ComplianceResult>`. The link between them is the `@ServiceImpl` annotation, not Java's `implements`.
+The handler starts a `ComplianceWorkflow` and returns a handle. The actual business logic runs inside an activity within the workflow, where it gets retries, timeouts, and heartbeats for free. Plus, the workflow can pause for human review via `@UpdateMethod` — something a direct call could never support.
+
+**Rule:** If the operation needs real work, start a Workflow. If it needs to interact with an already-running Workflow, use a sync operation (you'll see this in TODO 6b).
+
+</details>
+
+<details>
+<summary>💡 Why doesn't the handler class implement the service interface?</summary>
+
+Don't write `class ComplianceNexusServiceImpl implements ComplianceNexusService`. The handler does **not** implement the interface — the signatures are completely different. The interface method returns `ComplianceResult`, but the handler method returns `OperationHandler<ComplianceRequest, ComplianceResult>`. The link between them is the `@ServiceImpl` annotation, not Java's `implements`.
+
+</details>
 
 ### Quick Check
 
@@ -436,7 +400,7 @@ If the operation only needs to interact with an already-running Workflow, use a 
 
 ---
 
-## TODO 5: Create the Compliance Worker
+## TODO 3: Create the Compliance Worker
 
 **File:** `compliance/temporal/ComplianceWorkerApp.java`
 
@@ -481,11 +445,9 @@ Compliance Worker started on: compliance-risk
 ```
 
 If it fails to compile, check:
-- TODO 1: Does `ComplianceWorkflow` have `@WorkflowInterface`, `@WorkflowMethod`, and `@UpdateMethod`?
-- TODO 2: Does `ComplianceWorkflowImpl` use `Workflow.await()` and call the activity?
-- TODO 3: Does `ComplianceNexusService` have `@Service` and `@Operation`?
-- TODO 4: Does `ComplianceNexusServiceImpl` have `@ServiceImpl` and `@OperationImpl`?
-- TODO 5: Are you registering the workflow, activity, and Nexus service?
+- TODO 1: Does `ComplianceNexusService` have `@Service` and `@Operation`?
+- TODO 2: Does `ComplianceNexusServiceImpl` have `@ServiceImpl` and `@OperationImpl`?
+- TODO 3: Are you registering the workflow, activity, and Nexus service?
 
 > **Keep the compliance worker running** — you'll need it for Checkpoint 2.
 
@@ -493,12 +455,12 @@ If it fails to compile, check:
 
 ## Checkpoint 1.5: Create the Nexus Endpoint
 
-Now that the compliance side is built, register the Nexus endpoint with Temporal. This tells Temporal: *"When someone calls `compliance-endpoint`, route it to the `compliance-risk` task queue."*
+Now that the compliance side is built, register the Nexus endpoint with Temporal. This tells Temporal: *"When someone calls `compliance-endpoint`, route it to the `compliance-risk` task queue in `compliance-namespace`."*
 
 ```bash
 temporal operator nexus endpoint create \
   --name compliance-endpoint \
-  --target-namespace default \
+  --target-namespace compliance-namespace \
   --target-task-queue compliance-risk
 ```
 
@@ -507,11 +469,13 @@ You should see:
 Endpoint compliance-endpoint created.
 ```
 
-> **Analogy:** This is like adding a contact to your phone. The endpoint name is the contact name; the task queue is the phone number. You only do this once.
+> **Analogy:** This is like adding a contact to your phone. The endpoint name is the contact name; the task queue + namespace is the phone number. You only do this once.
+
+> See [Temporal Namespace Best Practices](https://docs.temporal.io/nexus) for why separating caller and handler namespaces matters in production.
 
 ---
 
-## TODO 6: Replace Activity Stub with Nexus Stub
+## TODO 4: Replace Activity Stub with Nexus Stub
 
 **File:** `payments/temporal/PaymentProcessingWorkflowImpl.java`
 
@@ -570,17 +534,17 @@ ComplianceResult compliance = complianceService.checkCompliance(compReq);
 - `ComplianceResult` — same return type
 - All surrounding logic — untouched
 
-> **Where does the endpoint come from?** Not here! The workflow only knows the **service** (`ComplianceNexusService`). The **endpoint** (`"compliance-endpoint"`) is configured in the worker (TODO 7). This keeps the workflow portable.
+> **Where does the endpoint come from?** Not here! The workflow only knows the **service** (`ComplianceNexusService`). The **endpoint** (`"compliance-endpoint"`) is configured in the worker (TODO 5). This keeps the workflow portable.
 
 ---
 
-## TODO 7: Update the Payments Worker
+## TODO 5: Update the Payments Worker
 
 **File:** `payments/temporal/PaymentsWorkerApp.java`
 
 Two changes:
 
-**CHANGE 1:** Register the workflow with `NexusServiceOptions`:
+**CHANGE 1:** Register both workflows with `NexusServiceOptions` (maps service to endpoint):
 ```java
 worker.registerWorkflowImplementationTypes(
     WorkflowImplementationOptions.newBuilder()
@@ -590,7 +554,8 @@ worker.registerWorkflowImplementationTypes(
                 .setEndpoint("compliance-endpoint")  // matches CLI endpoint
                 .build()))
         .build(),
-    PaymentProcessingWorkflowImpl.class);
+    PaymentProcessingWorkflowImpl.class,
+    ReviewCallerWorkflowImpl.class);       // both workflows use the same Nexus endpoint
 ```
 
 **CHANGE 2:** Remove `ComplianceActivityImpl` registration:
@@ -604,9 +569,9 @@ worker.registerActivitiesImplementations(new ComplianceActivityImpl(checker));
 
 ---
 
-## Checkpoint 2: Full Decoupled End-to-End
+## Checkpoint 2: Decoupled End-to-End (Automated Decisions)
 
-You need **4 terminal windows** now:
+You need **3 terminal windows** now:
 
 **Terminal 0:** Temporal server (already running)
 
@@ -628,22 +593,9 @@ cd exercise
 mvn compile exec:java@starter
 ```
 
-You should see TXN-A (`COMPLETED`) and TXN-C (`DECLINED_COMPLIANCE`) return immediately. But TXN-B ($12K, US→UK) is MEDIUM risk — its compliance workflow is **paused, waiting for human review**.
+TXN-A and TXN-C each take about 10 seconds (the compliance workflow includes a durable sleep to demonstrate Checkpoint 3). TXN-B ($12K, US→UK) is MEDIUM risk — its compliance workflow is **paused, waiting for human review** and will not complete yet. That's expected — you'll implement the review path in TODO 6.
 
-**Terminal 4 — Approve TXN-B:**
-```bash
-temporal workflow update execute \
-  --workflow-id compliance-TXN-B \
-  --name review \
-  --input 'true' \
-  --input '"Approved after manual review"'
-```
-
-> **CLI tip:** When a Temporal method takes multiple arguments, pass each one as a separate `--input` flag. Each value is JSON-encoded individually — so booleans are bare (`true`), but strings need double quotes (`'"like this"'`). A single `--input '[true, "text"]'` array won't work because the CLI treats the whole thing as one argument.
-
-You should see the Update result returned, and back in Terminal 3, TXN-B completes with `COMPLETED`.
-
-:white_check_mark: **Checkpoint 2 passed** if you get these results:
+:white_check_mark: **Checkpoint 2 passed** if you see these results:
 
 <table>
 <tr>
@@ -656,34 +608,25 @@ You should see the Update result returned, and back in Terminal 3, TXN-B complet
 <td><code>TXN-A</code></td>
 <td>&#x1F7E2; LOW</td>
 <td>&#x2705; <code>COMPLETED</code></td>
-<td>Auto-approved</td>
+<td>Auto-approved (~10s)</td>
 </tr>
 <tr>
 <td><code>TXN-B</code></td>
 <td>&#x1F7E0; MEDIUM</td>
-<td>&#x2705; <code>COMPLETED</code></td>
-<td>Human-approved via Update</td>
+<td>⏸️ Waiting</td>
+<td>Paused for human review (you'll complete this in TODO 6)</td>
 </tr>
 <tr>
 <td><code>TXN-C</code></td>
 <td>&#x1F534; HIGH</td>
 <td>&#x1F6AB; <code>DECLINED_COMPLIANCE</code></td>
-<td>Auto-denied</td>
+<td>Auto-denied (~10s, amount &gt; $50K)</td>
 </tr>
 </table>
 
-Same data flow, completely different architecture. Two workers, two blast radii, two independent teams — plus human-in-the-loop for edge cases.
+Two workers, two blast radii, two independent teams. The automated compliance path works end-to-end through Nexus.
 
-> **Check the Temporal UI** at http://localhost:8233 — you should see Nexus operations and the Update in the workflow event history!
-
-> **Try denying instead:** Run the same command with `false` to see TXN-B get `DECLINED_COMPLIANCE`:
-> ```bash
-> temporal workflow update execute \
->   --workflow-id compliance-TXN-B \
->   --name review \
->   --input 'false' \
->   --input '"Denied: suspicious pattern"'
-> ```
+> **Check the Temporal UI** at http://localhost:8233 — you should see Nexus operations in the workflow event history!
 
 ---
 
@@ -699,7 +642,7 @@ cd exercise
 mvn compile exec:java@starter
 ```
 
-The starter runs TXN-A first. TXN-A has a 2-second processing delay in the ComplianceChecker. **During that 2-second window:**
+The starter runs TXN-A first. TXN-A has a 10-second durable sleep in `ComplianceWorkflowImpl`. **During that 10-second window:**
 
 **Terminal 1 — Kill the compliance worker (Ctrl+C)**
 
@@ -724,7 +667,12 @@ Now watch:
 
 **What just happened:** The payment workflow didn't crash. It didn't timeout. It didn't lose data. It didn't need retry logic. It just... waited. When the compliance worker came back, Temporal automatically routed the pending Nexus operation to it. Durability extends across the team boundary — that's the whole point of Nexus.
 
-> **Compare with a plain HTTP call:** If Payments called Compliance over REST, you'd need circuit breakers, retry queues, dead letter queues, idempotency keys, and a way to correlate the response back to the right payment. With Nexus, all of that is built in.
+<details>
+<summary>💡 Compare with a plain HTTP call</summary>
+
+If Payments called Compliance over REST, you'd need circuit breakers, retry queues, dead letter queues, idempotency keys, and a way to correlate the response back to the right payment. With Nexus, all of that is built in.
+
+</details>
 
 ---
 
@@ -745,7 +693,7 @@ You saw the workflow **wait** for the compliance worker to come back. But what i
 
 The Nexus operation fails with a `SCHEDULE_TO_CLOSE` timeout after 10 minutes. The workflow's `catch` block handles it — the payment gets status `FAILED` instead of hanging forever.
 
-This is the `scheduleToCloseTimeout` you set in TODO 6:
+This is the `scheduleToCloseTimeout` you set in TODO 4:
 
 ```java
 NexusOperationOptions.newBuilder()
@@ -755,6 +703,71 @@ NexusOperationOptions.newBuilder()
 **The lesson:** Nexus gives you durability, not infinite patience. You control how long the workflow is willing to wait. In production, you'd set this based on your SLA — maybe 30 seconds for a real-time payment, or 24 hours for a batch compliance review.
 
 </details>
+
+---
+
+## TODO 6: Send a Workflow Update via Nexus (Sync Handler)
+
+You used `fromWorkflowHandle` in TODO 2 for **starting** a long-running workflow. Now you'll use `OperationHandler.sync` for **interacting** with an already-running workflow.
+
+### TODO 6a: Add `submitReview` to the service interface
+
+**File:** `shared/nexus/ComplianceNexusService.java`
+
+Add a second operation:
+```java
+@Operation
+ComplianceResult submitReview(ReviewRequest request);
+```
+
+### TODO 6b: Implement the sync handler
+
+**File:** `compliance/temporal/ComplianceNexusServiceImpl.java`
+
+Add a new `@OperationImpl` method using `OperationHandler.sync`:
+
+```java
+@OperationImpl
+public OperationHandler<ReviewRequest, ComplianceResult> submitReview() {
+    return OperationHandler.sync((ctx, details, input) -> {
+        WorkflowClient client = Nexus.getOperationContext().getWorkflowClient();
+        ComplianceWorkflow wf = client.newWorkflowStub(
+                ComplianceWorkflow.class,
+                "compliance-" + input.getTransactionId());
+        return wf.review(input.isApproved(), input.getExplanation());
+    });
+}
+```
+
+**Key differences from TODO 2:**
+
+| | TODO 2 (`checkCompliance`) | TODO 6b (`submitReview`) |
+|---|---|---|
+| Pattern | `fromWorkflowHandle` | `OperationHandler.sync` |
+| What it does | Starts a new long-running workflow | Sends Update to an existing workflow |
+| Durability | Async — workflow runs independently | Sync — must complete in 10 seconds |
+| Client access | `client` parameter in lambda | `Nexus.getOperationContext().getWorkflowClient()` |
+| Retry behavior | Retries reuse the same workflow | Update is idempotent if workflow ID is stable |
+
+> ⚠️ **`OperationHandler.sync` must complete within 10 seconds.** This is fine here because the `review()` Update returns immediately — it just stores the result and returns. Any slow operation (activity, sleep, await) must go in a workflow started via `fromWorkflowHandle`.
+
+### Checkpoint: Complete the Human Review Path
+
+After completing TODOs 6a and 6b, make sure both workers are running and TXN-B is still waiting from Checkpoint 2. If you need to restart, run the starter again first.
+
+**Terminal 4 — Approve TXN-B via Nexus:**
+```bash
+cd exercise
+mvn compile exec:java@review-starter
+```
+
+This starts a `ReviewCallerWorkflow` in the payments namespace that calls the `submitReview` Nexus operation. The Compliance team's sync handler receives it, looks up the `compliance-TXN-B` workflow, and sends the `review` Update — all through the Nexus boundary, with no direct access to the compliance workflow internals.
+
+> **Want to deny instead?** Edit `ReviewStarter.java`, change `true` to `false`, and re-run.
+
+You should see the review result returned in Terminal 4, and back in Terminal 3, TXN-B completes with `COMPLETED`.
+
+:white_check_mark: **Checkpoint passed** if TXN-B completes with `COMPLETED` after running the review starter.
 
 ---
 

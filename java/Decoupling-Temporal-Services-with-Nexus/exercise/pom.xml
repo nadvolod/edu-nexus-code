@@ -78,6 +78,13 @@
                             <mainClass>payments.temporal.PaymentStarter</mainClass>
                         </configuration>
                     </execution>
+                    <!-- mvn compile exec:java@review-starter (after TODO 6) -->
+                    <execution>
+                        <id>review-starter</id>
+                        <configuration>
+                            <mainClass>payments.temporal.ReviewStarter</mainClass>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
         </plugins>

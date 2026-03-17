@@ -1,40 +1,5 @@
 package compliance.temporal.workflow;
 
-// ═══════════════════════════════════════════════════════════════════
-//  TODO 2: Implement the ComplianceWorkflow
-// ═══════════════════════════════════════════════════════════════════
-//
-// This workflow:
-//   1. Runs ComplianceActivity.checkCompliance() on the request
-//   2. If LOW or HIGH risk → returns immediately
-//   3. If MEDIUM risk → waits for a human review() Update
-//
-// ── What to implement: ──────────────────────────────────────────
-//
-//   Fields:
-//     - ComplianceRequest request (store the input)
-//     - ComplianceResult autoResult (store the automated check result)
-//     - ComplianceResult reviewResult = null (set by review Update)
-//     - An activity stub for ComplianceActivity (30s startToCloseTimeout)
-//
-//   run(ComplianceRequest request):
-//     1. Store this.request = request
-//     2. Call complianceActivity.checkCompliance(request) → autoResult
-//     3. Add Workflow.sleep(Duration.ofSeconds(10)) to simulate slow processing
-//        (durable: kill the compliance worker mid-sleep, restart it — the workflow resumes)
-//     4. If autoResult risk is NOT "MEDIUM" → return autoResult
-//     5. Otherwise: Workflow.await(() -> reviewResult != null)
-//     6. Return reviewResult
-//
-//   review(boolean approved, String explanation):
-//     - Create a new ComplianceResult with the review decision
-//     - Store it in reviewResult (this unblocks run())
-//     - Return reviewResult
-//
-//   validateReview(boolean approved, String explanation):
-//     - Throw IllegalStateException if not awaiting review
-//     - Throw IllegalStateException if review already submitted
-
 import compliance.domain.ComplianceRequest;
 import compliance.domain.ComplianceResult;
 import compliance.temporal.activity.ComplianceActivity;
@@ -43,6 +8,20 @@ import io.temporal.workflow.Workflow;
 
 import java.time.Duration;
 
+/**
+ * [GIVEN] Compliance workflow implementation — pre-built for this exercise.
+ *
+ * Runs the automated compliance check, then conditionally waits for human review.
+ *
+ * LOW / HIGH risk → returns the automated result immediately.
+ * MEDIUM risk     → pauses and waits for a review() Update to approve or deny.
+ *
+ * The 10-second Workflow.sleep() is here intentionally — it gives you a window
+ * to kill and restart the compliance worker to see Nexus durability in action
+ * (Checkpoint 3).
+ *
+ * Your work starts at TODO 3. No changes needed here.
+ */
 public class ComplianceWorkflowImpl implements ComplianceWorkflow {
 
     private ComplianceRequest request;
@@ -57,20 +36,39 @@ public class ComplianceWorkflowImpl implements ComplianceWorkflow {
 
     @Override
     public ComplianceResult run(ComplianceRequest request) {
-        // TODO: Store the request, run the activity, add Workflow.sleep(10s),
-        //       check risk level: if MEDIUM → Workflow.await(() -> reviewResult != null)
-        //       otherwise → return autoResult directly
-        return null;
+        this.request = request;
+
+        // Step 1: Run automated compliance check
+        autoResult = complianceActivity.checkCompliance(request);
+
+        // Durable delay — demonstrates Nexus + Temporal durability.
+        // Kill the compliance worker mid-sleep, restart it, and the workflow resumes automatically.
+        Workflow.sleep(Duration.ofSeconds(10));
+
+        // Step 2: LOW or HIGH risk → return immediately
+        if (!"MEDIUM".equals(autoResult.getRiskLevel())) {
+            return autoResult;
+        }
+
+        // Step 3: MEDIUM risk → wait for human review via Update
+        Workflow.await(() -> reviewResult != null);
+        return reviewResult;
     }
 
     @Override
     public ComplianceResult review(boolean approved, String explanation) {
-        // TODO: Create ComplianceResult from the review decision, store in reviewResult
-        return null;
+        this.reviewResult = new ComplianceResult(
+                request.getTransactionId(), approved, "MEDIUM", explanation);
+        return reviewResult;
     }
 
     @Override
     public void validateReview(boolean approved, String explanation) {
-        // TODO: Throw IllegalStateException if not awaiting review or already reviewed
+        if (autoResult == null || !"MEDIUM".equals(autoResult.getRiskLevel())) {
+            throw new IllegalStateException("Workflow is not awaiting review");
+        }
+        if (reviewResult != null) {
+            throw new IllegalStateException("Review already submitted");
+        }
     }
 }

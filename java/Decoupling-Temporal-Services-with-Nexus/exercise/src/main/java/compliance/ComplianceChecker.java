@@ -14,12 +14,13 @@ import java.util.Set;
  * Same interface whether used as an Activity or behind a Nexus handler.
  *
  * Rules:
- *   - OFAC sanctioned countries (North Korea, Iran, Cuba, Syria, Venezuela) → HIGH risk, blocked
- *   - Amount > $50,000 → HIGH risk, blocked
+ *   - Amount > $50,000 → HIGH risk, blocked (TXN-C in the exercise hits this: $75K domestic)
+ *   - OFAC sanctioned countries (Iran, Cuba, Syria, Venezuela) → HIGH risk, blocked
  *   - Amount > $10,000 or international to unusual jurisdiction → MEDIUM risk, approved with note
  *   - Everything else → LOW risk, approved
  *
  * Students use this class as-is — focus is on the Nexus boundary, not compliance logic.
+ * To test the OFAC rule, try sending a transaction to "Iran" as the receiver country.
  */
 public class ComplianceChecker {
 
