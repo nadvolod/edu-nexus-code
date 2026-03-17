@@ -5,6 +5,7 @@
     <option name="originalFiles">
       <list>
         <option value="$PROJECT_DIR$/java/Decoupling-Temporal-Services-with-Nexus/solution/pom.xml" />
+        <option value="$PROJECT_DIR$/java/Decoupling-Temporal-Services-with-Nexus/exercise/pom.xml" />
       </list>
     </option>
   </component>

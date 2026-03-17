@@ -1,6 +1,7 @@
 package payments.temporal;
 
 import io.temporal.client.WorkflowClient;
+import io.temporal.client.WorkflowClientOptions;
 import io.temporal.client.WorkflowOptions;
 import io.temporal.serviceclient.WorkflowServiceStubs;
 import payments.Shared;
@@ -23,15 +24,18 @@ public class PaymentStarter {
         System.out.println("==========================================================\n");
 
         WorkflowServiceStubs service = WorkflowServiceStubs.newLocalServiceStubs();
-        WorkflowClient client = WorkflowClient.newInstance(service);
+        WorkflowClientOptions clientOptions = WorkflowClientOptions.newBuilder()
+                .setNamespace("payments-namespace")
+                .build();
+        WorkflowClient client = WorkflowClient.newInstance(service, clientOptions);
 
         PaymentRequest[] transactions = {
                 new PaymentRequest("TXN-A", 250.00, "USD", "US", "US",
                         "Routine supplier payment", "ACC-001", "ACC-002"),
                 new PaymentRequest("TXN-B", 12000.00, "USD", "US", "UK",
                         "International consulting fee", "ACC-003", "ACC-004"),
-                new PaymentRequest("TXN-C", 75000.00, "USD", "US", "North Korea",
-                        "Business consulting services", "ACC-005", "ACC-006"),
+                new PaymentRequest("TXN-C", 75000.00, "USD", "US", "US",
+                        "Large capital transfer", "ACC-005", "ACC-006"),
         };
 
         for (PaymentRequest txn : transactions) {
