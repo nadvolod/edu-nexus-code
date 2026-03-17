@@ -35,7 +35,7 @@
   <rect width="920" height="390" fill="url(#bgGrad)" rx="12"/>
 
   <!-- Title -->
-  <text x="460" y="34" text-anchor="middle" fill="#e6edf3" font-size="17" font-weight="700">Decoupling Temporal Services with Nexus</text>
+  <text x="460" y="34" text-anchor="middle" fill="#e6edf3" font-size="17" font-weight="700">Decouple Monolith</text>
   <text x="460" y="54" text-anchor="middle" fill="#b1bac4" font-size="12">Separate security perimeters. Independent blast radii. Durable cross-team calls.</text>
 
   <!-- Security callout pill -->
