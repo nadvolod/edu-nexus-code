@@ -1,4 +1,4 @@
-# Decoupling Temporal Services with Nexus
+# Decouple Monolith
 
 **Language:** Java | **Prereqs:** Temporal workflows & activities
 
@@ -788,5 +788,5 @@ From here you can explore more advanced patterns — multi-step compliance pipel
 
 ---
 
-*Decoupling Temporal Services with Nexus*
+*Decouple Monolith*
 *Part of [edu-nexus-code](https://github.com/temporalio/edu-nexus-code)*

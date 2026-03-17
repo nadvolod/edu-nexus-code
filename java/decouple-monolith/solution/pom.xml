@@ -5,11 +5,11 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>io.temporal.nexus</groupId>
-    <artifactId>decoupling-temporal-services-nexus-solution-java</artifactId>
+    <artifactId>decouple-monolith-solution</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <name>Decoupling Temporal Services with Nexus - Solution (Java)</name>
+    <name>Decouple Monolith - Solution (Java)</name>
     <description>Solution: Refactor a working monolith by adding a Nexus boundary between Payments and Compliance</description>
 
     <properties>

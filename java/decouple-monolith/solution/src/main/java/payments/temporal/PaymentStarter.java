@@ -19,7 +19,7 @@ public class PaymentStarter {
 
     public static void main(String[] args) {
         System.out.println("==========================================================");
-        System.out.println("  PAYMENT STARTER — Decoupling Temporal Services with Nexus");
+        System.out.println("  PAYMENT STARTER — Decouple Monolith");
         System.out.println("  Running 3 transactions through Temporal");
         System.out.println("==========================================================\n");
 
