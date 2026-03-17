@@ -1039,8 +1039,7 @@ const panelContent = {
     body: `
       <p>This is the <strong>most important new file</strong> in the exercise.</p>
       <div class="highlight"><code>@ServiceImpl(service = ComplianceNexusService.class)</code> tells Temporal this class handles Nexus requests for that interface.</div>
-      <p>The <code>@OperationImpl</code> method returns <code>WorkflowClientOperationHandlers.sync(...)</code> \u2014 meaning: run inline, return immediately.</p>
-      <p>For <strong>async</strong> handlers using <code>fromWorkflowMethod()</code>, see the <a href="https://docs.temporal.io/nexus" target="_blank">Nexus docs</a>.</p>
+      <p>The <code>@OperationImpl</code> method uses <code>WorkflowRunOperation.fromWorkflowHandle(...)</code> for async operations (starting workflows) and <code>OperationHandler.sync(...)</code> for sync operations (interacting with running workflows).</p>
     `
   },
 };

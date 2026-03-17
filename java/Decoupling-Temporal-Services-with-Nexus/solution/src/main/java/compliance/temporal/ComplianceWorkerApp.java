@@ -4,6 +4,7 @@ import compliance.ComplianceChecker;
 import compliance.temporal.activity.ComplianceActivityImpl;
 import compliance.temporal.workflow.ComplianceWorkflowImpl;
 import io.temporal.client.WorkflowClient;
+import io.temporal.client.WorkflowClientOptions;
 import io.temporal.serviceclient.WorkflowServiceStubs;
 import io.temporal.worker.Worker;
 import io.temporal.worker.WorkerFactory;
@@ -20,9 +21,12 @@ import io.temporal.worker.WorkerFactory;
 public class ComplianceWorkerApp {
 
     public static void main(String[] args) {
-        // C — Connect to Temporal
+        // C — Connect to Temporal (compliance-namespace)
         WorkflowServiceStubs service = WorkflowServiceStubs.newLocalServiceStubs();
-        WorkflowClient client = WorkflowClient.newInstance(service);
+        WorkflowClientOptions clientOptions = WorkflowClientOptions.newBuilder()
+                .setNamespace("compliance-namespace")
+                .build();
+        WorkflowClient client = WorkflowClient.newInstance(service, clientOptions);
 
         // R — Create factory and worker
         WorkerFactory factory = WorkerFactory.newInstance(client);
@@ -38,8 +42,9 @@ public class ComplianceWorkerApp {
 
         System.out.println("=========================================================");
         System.out.println("  Compliance Worker started on: compliance-risk");
+        System.out.println("  Namespace: compliance-namespace");
         System.out.println("  Registered: ComplianceWorkflow, ComplianceActivity,");
-        System.out.println("              ComplianceNexusServiceImpl (async handler)");
+        System.out.println("              ComplianceNexusServiceImpl (async + sync handlers)");
         System.out.println("  Waiting for Nexus requests from Payments team...");
         System.out.println("=========================================================");
     }

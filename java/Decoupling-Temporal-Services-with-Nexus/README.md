@@ -98,17 +98,6 @@ You could split Payments and Compliance into microservices with REST calls. But 
 | **Team independence** | Shared failure domain | Shared deployment | Separate workers, blast radii |
 | **Code change** | Full rewrite | — | One-line stub swap |
 
-The one-line swap:
-```java
-// BEFORE — direct activity call (same worker, same blast radius):
-ComplianceResult compliance = complianceActivity.checkCompliance(compReq);
-
-// AFTER — Nexus call (separate worker, separate blast radius, durable):
-ComplianceResult compliance = complianceService.checkCompliance(compReq);
-```
-
-Same method name. Same input. Same output. Completely different architecture.
-
 > 🚀 **New to Nexus?** Try the [Nexus Quick Start](https://docs.temporal.io/nexus) for a faster path. Come back here for the full decoupling exercise.
 
 ---
@@ -134,7 +123,7 @@ Before changing anything, let's see the system working. You need **3 terminal wi
 temporal server start-dev
 ```
 
-**Create namespaces** (one-time setup, best practice for cross-team isolation):
+**Create namespaces** (one-time setup):
 ```bash
 temporal operator namespace create --namespace payments-namespace
 temporal operator namespace create --namespace compliance-namespace
@@ -293,7 +282,7 @@ Open them to read the code — they show the human-in-the-loop pattern you'll us
 This is the **shared contract** between teams — like an OpenAPI spec, but durable. Both teams depend on this interface.
 
 **What to add for TODO 1:**
-1. `@Service` annotation on the interface (from `io.nexusrpc`)
+1. `@Service` annotation on the interface
 2. `@Operation` annotation on `checkCompliance`
 
 > **Note:** You'll also see a `submitReview` method stub in the file — leave it for TODO 6a. For now, just focus on getting `checkCompliance` wired up.
@@ -310,8 +299,6 @@ public interface ComplianceNexusService {
 }
 ```
 
-> **Tip:** The `@Service` and `@Operation` annotations come from `io.nexusrpc`, NOT from `io.temporal`. Nexus is a protocol — Temporal implements it, but the interface annotations are protocol-level.
-
 ---
 
 ## TODO 2: Implement the Nexus Handler
@@ -327,7 +314,7 @@ This handler receives Nexus requests from Payments. Instead of running business 
 **What to implement:**
 1. Add `@ServiceImpl` annotation pointing to the interface
 2. Create `checkCompliance()` method returning `OperationHandler<ComplianceRequest, ComplianceResult>`
-3. Inside: return `WorkflowClientOperationHandlers.fromWorkflowHandle(...)` that starts a workflow and returns a handle
+3. Inside: return `WorkflowRunOperation.fromWorkflowHandle(...)` that starts a workflow and returns a handle
 
 **Pattern to follow:**
 ```java
@@ -336,7 +323,8 @@ public class ComplianceNexusServiceImpl {
 
     @OperationImpl
     public OperationHandler<ComplianceRequest, ComplianceResult> checkCompliance() {
-        return WorkflowClientOperationHandlers.fromWorkflowHandle((ctx, details, client, input) -> {
+        return WorkflowRunOperation.fromWorkflowHandle((ctx, details, input) -> {
+            WorkflowClient client = Nexus.getOperationContext().getWorkflowClient();
             ComplianceWorkflow wf = client.newWorkflowStub(
                     ComplianceWorkflow.class,
                     WorkflowOptions.newBuilder()
@@ -350,27 +338,6 @@ public class ComplianceNexusServiceImpl {
 }
 ```
 
-> ⚠️ **Nexus sync handlers have a 10-second deadline.** That's why the handler starts a workflow instead of running compliance logic directly. The workflow can run for minutes or hours — it's durable. The handler just starts it and returns a handle (like a receipt number). If you put blocking logic in the handler, it will time out.
->
-> This is the reason `fromWorkflowHandle()` exists: it links the Nexus operation to the backing workflow durably. Retries reuse the same workflow instead of creating duplicates.
-
-<details>
-<summary>💡 Why not call ComplianceChecker.checkCompliance() directly in the handler?</summary>
-
-Sync handlers run inside the Nexus request processing path. They should only use Temporal primitives (workflow starts, queries). Running arbitrary Java code (like `ComplianceChecker.checkCompliance()`) bypasses Temporal's durability guarantees.
-
-The handler starts a `ComplianceWorkflow` and returns a handle. The actual business logic runs inside an activity within the workflow, where it gets retries, timeouts, and heartbeats for free. Plus, the workflow can pause for human review via `@UpdateMethod` — something a direct call could never support.
-
-**Rule:** If the operation needs real work, start a Workflow. If it needs to interact with an already-running Workflow, use a sync operation (you'll see this in TODO 6b).
-
-</details>
-
-<details>
-<summary>💡 Why doesn't the handler class implement the service interface?</summary>
-
-Don't write `class ComplianceNexusServiceImpl implements ComplianceNexusService`. The handler does **not** implement the interface — the signatures are completely different. The interface method returns `ComplianceResult`, but the handler method returns `OperationHandler<ComplianceRequest, ComplianceResult>`. The link between them is the `@ServiceImpl` annotation, not Java's `implements`.
-
-</details>
 
 ### Quick Check
 
@@ -474,8 +441,6 @@ Endpoint compliance-endpoint created.
 ```
 
 > **Analogy:** This is like adding a contact to your phone. The endpoint name is the contact name; the task queue + namespace is the phone number. You only do this once.
-
-> See [Temporal Namespace Best Practices](https://docs.temporal.io/nexus) for why separating caller and handler namespaces matters in production.
 
 ---
 
@@ -671,43 +636,6 @@ Now watch:
 
 **What just happened:** The payment workflow didn't crash. It didn't timeout. It didn't lose data. It didn't need retry logic. It just... waited. When the compliance worker came back, Temporal automatically routed the pending Nexus operation to it. Durability extends across the team boundary — that's the whole point of Nexus.
 
-<details>
-<summary>💡 Compare with a plain HTTP call</summary>
-
-If Payments called Compliance over REST, you'd need circuit breakers, retry queues, dead letter queues, idempotency keys, and a way to correlate the response back to the right payment. With Nexus, all of that is built in.
-
-</details>
-
----
-
-## Bonus Exercise: What Happens When You Wait Too Long?
-
-You saw the workflow **wait** for the compliance worker to come back. But what if it never comes back?
-
-**Try this:**
-
-1. Start both workers and the starter
-2. Kill the compliance worker while a transaction is processing
-3. **Don't restart it.** Wait and watch the Temporal UI at http://localhost:8233
-
-**Question:** What eventually happens to the payment workflow?
-
-<details>
-<summary>Answer</summary>
-
-The Nexus operation fails with a `SCHEDULE_TO_CLOSE` timeout after 10 minutes. The workflow's `catch` block handles it — the payment gets status `FAILED` instead of hanging forever.
-
-This is the `scheduleToCloseTimeout` you set in TODO 4:
-
-```java
-NexusOperationOptions.newBuilder()
-    .setScheduleToCloseTimeout(Duration.ofMinutes(10))
-```
-
-**The lesson:** Nexus gives you durability, not infinite patience. You control how long the workflow is willing to wait. In production, you'd set this based on your SLA — maybe 30 seconds for a real-time payment, or 24 hours for a batch compliance review.
-
-</details>
-
 ---
 
 ## TODO 6: Send a Workflow Update via Nexus (Sync Handler)
@@ -750,7 +678,7 @@ public OperationHandler<ReviewRequest, ComplianceResult> submitReview() {
 | Pattern | `fromWorkflowHandle` | `OperationHandler.sync` |
 | What it does | Starts a new long-running workflow | Sends Update to an existing workflow |
 | Durability | Async — workflow runs independently | Sync — must complete in 10 seconds |
-| Client access | `client` parameter in lambda | `Nexus.getOperationContext().getWorkflowClient()` |
+| Client access | `Nexus.getOperationContext().getWorkflowClient()` | `Nexus.getOperationContext().getWorkflowClient()` |
 | Retry behavior | Retries reuse the same workflow | Update is idempotent if workflow ID is stable |
 
 > ⚠️ **`OperationHandler.sync` must complete within 10 seconds.** This is fine here because the `review()` Update returns immediately — it just stores the result and returns. Any slow operation (activity, sleep, await) must go in a workflow started via `fromWorkflowHandle`.
@@ -802,25 +730,26 @@ The Nexus operation will be retried by Temporal until the `scheduleToCloseTimeou
 <details>
 <summary>Answer</summary>
 
-- `@Service` / `@Operation` (from `io.nexusrpc`) go on the **interface** — the shared contract both teams depend on
-- `@ServiceImpl` / `@OperationImpl` (from `io.nexusrpc.handler`) go on the **handler class** — the implementation that only the Compliance team owns
+- `@Service` / `@Operation` go on the **interface** — the shared contract both teams depend on
+- `@ServiceImpl` / `@OperationImpl` go on the **handler class** — the implementation that only the Compliance team owns
 
 Think of it as: the interface is the **menu** (shared), the handler is the **kitchen** (private).
 
 </details>
 
-**Q4:** What's wrong with using `WorkflowClientOperationHandlers.sync()` to back a Nexus operation with a workflow?
+**Q4:** What's wrong with using `OperationHandler.sync()` to back a Nexus operation with a long-running workflow?
 
 <details>
 <summary>Answer</summary>
 
-`sync()` starts a workflow **and** blocks for its result in a single handler call. If the Nexus operation retries (which happens during timeouts or transient failures), the handler runs again from scratch — starting a **duplicate** workflow each time. The previous workflow already completed, so the workflow ID is available again, and you end up with many identical workflows.
+`sync()` starts a workflow **and** blocks for its result in a single handler call. If the Nexus operation retries (which happens during timeouts or transient failures), the handler runs again from scratch — starting a **duplicate** workflow each time.
 
-The fix is `fromWorkflowHandle()`, which returns a **handle** (like a receipt number) linking the Nexus operation to the backing workflow. On retries, the infrastructure sees the handle and reuses the existing workflow instead of creating a new one.
+The fix is `WorkflowRunOperation.fromWorkflowHandle()`, which returns a **handle** (like a receipt number) linking the Nexus operation to the backing workflow. On retries, the infrastructure sees the handle and reuses the existing workflow instead of creating a new one.
 
 **Bad (creates duplicates on retry):**
 ```java
-WorkflowClientOperationHandlers.sync((ctx, details, client, input) -> {
+OperationHandler.sync((ctx, details, input) -> {
+    WorkflowClient client = Nexus.getOperationContext().getWorkflowClient();
     ComplianceWorkflow wf = client.newWorkflowStub(...);
     WorkflowClient.start(wf::run, input);
     return WorkflowStub.fromTyped(wf).getResult(ComplianceResult.class);
@@ -829,7 +758,8 @@ WorkflowClientOperationHandlers.sync((ctx, details, client, input) -> {
 
 **Good (retries reuse the same workflow):**
 ```java
-WorkflowClientOperationHandlers.fromWorkflowHandle((ctx, details, client, input) -> {
+WorkflowRunOperation.fromWorkflowHandle((ctx, details, input) -> {
+    WorkflowClient client = Nexus.getOperationContext().getWorkflowClient();
     ComplianceWorkflow wf = client.newWorkflowStub(...);
     return WorkflowHandle.fromWorkflowMethod(wf::run, input);
 });

@@ -4,6 +4,7 @@ import compliance.domain.ComplianceRequest;
 import compliance.domain.ComplianceResult;
 import io.nexusrpc.Operation;
 import io.nexusrpc.Service;
+import shared.domain.ReviewRequest;
 
 /**
  * Nexus Service Interface — the shared contract between Payments and Compliance teams.
@@ -17,4 +18,7 @@ public interface ComplianceNexusService {
 
     @Operation
     ComplianceResult checkCompliance(ComplianceRequest request);
+
+    @Operation
+    ComplianceResult submitReview(ReviewRequest request);
 }
