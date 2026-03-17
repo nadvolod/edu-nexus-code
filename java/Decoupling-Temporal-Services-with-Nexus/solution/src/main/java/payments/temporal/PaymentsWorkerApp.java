@@ -1,6 +1,7 @@
 package payments.temporal;
 
 import io.temporal.client.WorkflowClient;
+import io.temporal.client.WorkflowClientOptions;
 import io.temporal.serviceclient.WorkflowServiceStubs;
 import io.temporal.worker.Worker;
 import io.temporal.worker.WorkerFactory;
@@ -22,9 +23,12 @@ import java.util.Collections;
 public class PaymentsWorkerApp {
 
     public static void main(String[] args) {
-        // C — Connect to Temporal
+        // C — Connect to Temporal (payments-namespace)
         WorkflowServiceStubs service = WorkflowServiceStubs.newLocalServiceStubs();
-        WorkflowClient client = WorkflowClient.newInstance(service);
+        WorkflowClientOptions clientOptions = WorkflowClientOptions.newBuilder()
+                .setNamespace("payments-namespace")
+                .build();
+        WorkflowClient client = WorkflowClient.newInstance(service, clientOptions);
 
         // R — Register with Nexus endpoint mapping
         WorkerFactory factory = WorkerFactory.newInstance(client);
@@ -38,7 +42,8 @@ public class PaymentsWorkerApp {
                                         .setEndpoint("compliance-endpoint")
                                         .build()))
                         .build(),
-                PaymentProcessingWorkflowImpl.class);
+                PaymentProcessingWorkflowImpl.class,
+                ReviewCallerWorkflowImpl.class);
 
         // A — Activities (payment only — compliance moved to its own worker)
         PaymentGateway gateway = new PaymentGateway();
@@ -49,7 +54,8 @@ public class PaymentsWorkerApp {
 
         System.out.println("=========================================================");
         System.out.println("  Payments Worker started on: " + Shared.TASK_QUEUE);
-        System.out.println("  Registered: PaymentProcessingWorkflow, PaymentActivity");
+        System.out.println("  Namespace: payments-namespace");
+        System.out.println("  Registered: PaymentProcessingWorkflow, ReviewCallerWorkflow, PaymentActivity");
         System.out.println("  Nexus: ComplianceNexusService → compliance-endpoint");
         System.out.println("=========================================================");
     }

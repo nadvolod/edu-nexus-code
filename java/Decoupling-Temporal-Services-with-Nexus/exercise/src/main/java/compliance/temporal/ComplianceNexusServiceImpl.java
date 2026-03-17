@@ -16,14 +16,14 @@ package compliance.temporal;
 //
 //   1. Add @ServiceImpl(service = ComplianceNexusService.class) to the class
 //   2. Annotate checkCompliance() with @OperationImpl
-//   3. Return WorkflowClientOperationHandlers.fromWorkflowHandle(...)
+//   3. Return WorkflowRunOperation.fromWorkflowHandle(...)
 //
-//   return WorkflowClientOperationHandlers.fromWorkflowHandle((ctx, details, client, input) -> {
+//   return WorkflowRunOperation.fromWorkflowHandle((ctx, details, input) -> {
+//       WorkflowClient client = Nexus.getOperationContext().getWorkflowClient();
 //       ComplianceWorkflow wf = client.newWorkflowStub(
 //               ComplianceWorkflow.class,
 //               WorkflowOptions.newBuilder()
 //                       .setTaskQueue("compliance-risk")
-//                       .setNamespace("compliance-namespace")
 //                       .setWorkflowId("compliance-" + input.getTransactionId())
 //                       .build());
 //       return WorkflowHandle.fromWorkflowMethod(wf::run, input);
@@ -64,7 +64,7 @@ import io.nexusrpc.handler.ServiceImpl;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowOptions;
 import io.temporal.nexus.Nexus;
-import io.temporal.nexus.WorkflowClientOperationHandlers;
+import io.temporal.nexus.WorkflowRunOperation;
 import io.temporal.nexus.WorkflowHandle;
 import shared.domain.ReviewRequest;
 import shared.nexus.ComplianceNexusService;

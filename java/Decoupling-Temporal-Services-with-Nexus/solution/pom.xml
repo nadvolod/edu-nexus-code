@@ -16,7 +16,7 @@
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <temporal.version>1.27.0</temporal.version>
+        <temporal.version>1.31.0</temporal.version>
     </properties>
 
     <dependencies>
@@ -71,6 +71,12 @@
                         <id>starter</id>
                         <configuration>
                             <mainClass>payments.temporal.PaymentStarter</mainClass>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>review-starter</id>
+                        <configuration>
+                            <mainClass>payments.temporal.ReviewStarter</mainClass>
                         </configuration>
                     </execution>
                 </executions>
